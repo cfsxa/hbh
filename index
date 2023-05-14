@@ -1,0 +1,467 @@
+ 
+<!DOCTYPE html>
+<html lang="zh-cn">
+
+    <!--   The very beginning of the Head part   -->
+    <head>
+        <meta charset="utf-8">
+        <title>单航班 飞行数据可视化</title>
+
+        <!--   import depandents   -->
+        <script type="text/javascript" src="https://cdn.staticfile.org/echarts/5.3.3/echarts.min.js"></script>
+        <!-- <script type="text/javascript" src="https://cdn.staticfile.org/jquery/2.0.0/jquery.min.js"></script> -->
+        <script type="text/javascript" src="http://libs.baidu.com/jquery/2.1.4/jquery.min.js"></script>
+        <!-- <script type="text/javascript" src="https://code.jquery.com/jquery-3.1.1.min.js"></script> -->
+        <script type="text/javascript" src="https://unpkg.com/xlsx/dist/xlsx.full.min.js"></script>
+
+        <!-- <script type="text/javascript" src="C:\Users\Administrator\Desktop\singleFlight_test\jquery.js"></script> -->
+        <!-- <script type="text/javascript" src="C:\Users\Administrator\Desktop\singleFlight_test\echarts\dist\echarts.js"></script> -->
+        <!-- <script type="text/javascript" src="C:\Users\Administrator\Desktop\singleFlight_test\sheetjs\dist\xlsx.full.min.js"></script> -->
+
+        <!--    <script src = "https://cdn.bootcdn.net/ajax/libs/jquery/1.9.1/jquery.min.js"></script> -->
+        <!--    modify each part by css   -->
+        <style type="text/css">
+            body {
+                background: #f4f4f0;
+                padding: 40;
+                margin: 40;
+            }
+            .container {
+                width: 1777px;
+                margin: 0 auto;
+                background: #ffd;
+                padding: 20px;
+                min-height: 24vh;
+            }
+            .mt-sm {
+            margin-top: 44px;
+            }
+        </style>
+    </head>
+
+    <!--   The very beginning of the Body part   -->
+    <body>
+
+        <!--   Defined 加载本地文件 和 文字说明  -->
+        <div class="container">
+            <h1 style = "text-alignTicks">
+                河北航空---译码数据可视化分析（仅读取第一个sheet，基于js-xlsx）
+                </h1>
+            <div class="mt-sm">
+                <!--   The input with accept format   -->
+                <input type="file" id="file" style="display:none;" accept="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"/>
+                <a href="javascript:selectFile()">
+                    加载本地excel文件
+                    </a>
+                </div>
+            </div>
+
+        <!-- 为ECharts准备一个具备大小（宽高）的Dom -->
+        <div id="main" style="width: 1444px;height:678px;">
+            </div>
+
+        <!-- JS -->
+        <script type="text/javascript">
+            var chartDom = document.getElementById('main');
+            var myChart = echarts.init(chartDom);
+            var option = [];
+            var rows = [];
+            var data0 = [];
+            var lengthOfData0=0;
+            var data1 = [];
+            var data2 = [];
+            var columnVA = 0;
+            var columnRadio = 0;
+            var row = [];
+            var iterms = [];
+            var radioAlt50 = 0;
+            var times = 0;
+            var touchdown = 0;
+            var touchdownClumn = 0;
+            var touchdownClumnFlag = 0;
+            var VerticalAcc = [];
+            var MaxG = 1;
+            var rowMaxG = 0;
+            var times_VG = 1;
+
+            const colors = ['#5470C6', '#91CC75', '#EE6666','#444444','#997744','#9377EE', '#41CC75', '#810C75', '#91CC05', '#EE4466', '#334466', '#aE4aa6', '#bbbb66', '#E044bb'];
+
+            <!--  we hide the button so we need to find it out ById then clik  -->
+            function selectFile() {
+                document.getElementById('file').click();
+                }
+
+            <!--  listenning the change of file select ,e stands for an evnt  -->
+            $(function() {
+                document.getElementById('file').addEventListener('change', function(e) {
+                    console.log('touch off a event as e = files_list ',e)
+                    var files = e.target.files;
+                    if(files.length == 0)
+                        return;
+                    //文件列表中的第一个
+                    var f = files[0];
+                    if(!/\.xlsx$/g.test(f.name)) {
+                        alert('----only for *.xlsx！----');
+                        return;
+                        }
+                    readWorkbookFromLocalFile(f, function(workbook) {
+                        readWorkbook(workbook);
+                        });
+                    });
+                });
+
+            // read local excel file
+            function readWorkbookFromLocalFile(file, callback) {
+                var reader = new FileReader();
+                // once reader onload completed, it will wait 'reader.readAsBinaryString(file);'
+                reader.onload = function(e) {
+                    var data = e.target.result;
+                    //  read target as data then callback
+                    var workbook = XLSX.read(data, {type: 'binary'});
+                    if(callback) callback(workbook);
+                    };
+                //  reader.readAsBinaryString(file); this action will execute first
+                reader.readAsBinaryString(file);
+                }
+
+            function readWorkbook(workbook) {
+                var sheetNames = workbook.SheetNames; // 工作表名称集合
+                var worksheet = workbook.Sheets[sheetNames[0]]; // 这里我们只读取第一张sheet
+                var csv = XLSX.utils.sheet_to_csv(worksheet);
+                document.getElementById('result').innerHTML = csv2data(csv);
+                }
+
+            function csv2data(csv) {
+                var itermOfRow = 0;
+                var itermOfRow_test = 1;
+                var itermOfRow_flag = 1;
+                rows = csv.split('\n');
+                //  nothing to be used in last line
+                //  rows.pop();
+
+                //rows.length = the number of rows
+                for (var a = 0; a < rows.length; a++) {
+
+                    // row[a] is a 2d arry => star wiht row[a][0]
+                    row[a]=rows[a].split(',');
+// alert(row[a]);
+// alert(row[a].length);
+
+                    for (var i = 0; i < row[a].length; i++){
+
+                        if(row[a][i] == 'RADIO ALTITUDE'){
+                            // parameter iterms
+                            itermOfRow = a;
+                            columnRadio = i;
+                            }
+                        if(row[a][i]=='VERTICAL ACCELERATION'){
+                            // parameter iterms
+                            itermOfRow_test = a;
+                            columnVA = i;
+                            }
+
+                        // jump out of innerFor
+                        if ((columnRadio != columnVA) && (itermOfRow_test == itermOfRow)){
+                            break;
+                            }
+                        }
+
+                    // jump out of outerFor
+                    if ((columnRadio != columnVA) && (itermOfRow_test == itermOfRow)){
+                        iterms = row[a];
+                        //to make two arr to carry our data
+                        for(var a =0 ; a<iterms.length; a++ ){
+                            data0[a]=[];
+data0[a][0]='1';
+                            }
+                        break;
+                        }
+                    }
+// lengthOfData0 = data0[i].length;
+// alert(lengthOfData0);
+                for (var a =itermOfRow+3; a<rows.length; a++ ){
+                    row[a]=rows[a].split(',');
+//for(var i = 0 , j = 0, k = 0 , l = 0 ; i < row[a].length; i++ , j+=4 ,k+=8 ,l+=16) {}
+                    for(var i = 0 ; i < row[a].length; i++) {
+                        // if there will be a unit in a-itermOfRow-1 OR 2
+// if(k<8){alert(k);}
+var l=0;
+                        if((iterms[i] != '') && (iterms[i+1] != '')){
+
+// alert(rows.length);
+                            // transpose 2D arr ---- a-itermOfRow-3
+                            data0[i][data0[i].length]=row[a][i];
+                            //data1=data0;
+
+// lengthOfData0 = length.data0[i];
+//alert(data0[i].length);
+// alert(data0[i][a-itermOfRow-3]);
+                            }
+                        if((iterms[i] != '') && (iterms[i+1] == '')){
+// alert(a-itermOfRow-3);
+                            //check the length of iterm data
+                            for(var m = 0; m < 17; m++){
+
+                                if((iterms[i+m] != '') && (iterms[i+m+1] == '')){
+                                    data0[i][data0[i].length]=row[a][i+m];
+//alert('111');
+//alert(data0[i]);
+
+                                    }
+                                if((iterms[i+m] == '') && (iterms[i+m+1] == '')){
+                                    data0[i][data0[i].length]=row[a][i+m];
+//alert('222');
+//alert(data0[i][data0[i].length]);
+//alert(data0[i].length);
+                                    }
+                                if((iterms[i+m] == '') && (iterms[i+m+1] != '')){
+//alert(m);
+                                    data0[i][data0[i].length]=row[a][i+m];
+//alert('333');
+//alert(row[a][i+m]);
+//alert(data0[i]);
+                                    break;
+//alert(m);
+//alert(data0[i][data0[i].length]);
+
+                                    }
+                                }
+                            }
+                        // check the row of radioAlt50 50ft
+                        if (Number(data0[columnRadio][a-itermOfRow-3])>30){
+                            radioAlt50=a-itermOfRow-3;
+                            }
+
+                        // check the row of GROUND AIR
+                        if (data0[i][a-itermOfRow-3] == 'GROUND' && data0[i][a-itermOfRow-4] == 'AIR' && touchdownClumnFlag==0){
+                            touchdown=a-itermOfRow-4;
+                            touchdownClumn=i;
+                            touchdownClumnFlag=1;
+                            }
+
+                        // // check the lengthOfVA
+                        // if ((i >= columnVA) && (i < columnVA+lengthOfVA)){
+                        //     data1[columnVA].push(data0[i][a-itermOfRow-3]);
+                        //     }
+
+                        }
+                    }
+
+//alert(data0);
+                itermsOnTop(iterms);
+                }
+
+            //  to make a legend
+            function itermsOnTop(iterms) {
+                //alert(iterms);
+                for (var i=0;i<iterms.length;i++){
+
+                    if (iterms[i] != ''){
+                        var oTest = document.getElementsByClassName("container");
+                        var myHref = document.createElement('BUTTON');
+                        myHref.id = 'yante-18600021234';
+                        //myHref.href="javascript:myFunction()";
+                        var text = document.createTextNode(iterms[i]);
+                        myHref.appendChild(text);
+                        oTest[0].appendChild(myHref);
+
+                        myHref.onclick = function (){
+                            //alert(this.innerHTML);
+                            ytyt(this.innerHTML);
+                            //console.log(this.innerHTML,this.id,option[0].legend);
+                            }
+                        }
+                    }
+
+                option[0] = {
+                    dataZoom: {
+                        type: 'inside'
+                        },
+                    color: colors,
+                    tooltip: {
+                        trigger: 'axis',
+                        axisPointer: {
+                            type: 'cross'
+                            }
+                        },
+                    grid: {
+                        left: '17%'
+                        //top: '10%'
+                        },
+                    toolbox: {
+                        feature: {
+                            dataView: {
+                                show: true,
+                                readOnly: false
+                                },
+                            restore: {
+                                show: true
+                                },
+                            saveAsImage: {
+                                show: true
+                                }
+                            }
+                        },
+                    legend: {
+                        //orient:'horizontal',
+                        //orient:'vertical',
+                        height:0,
+                        width:0,
+                        data: iterms,
+                        right: 90,
+                        x:'left',
+                        y:'top',
+                        // x:'right',
+                        // y:'center',
+                        },
+                    xAxis: [
+                        {
+                            type: 'category',
+                            axisTick: {
+                                alignWithLabel: true
+                                },
+                            // prettier-ignore
+                            data: data0[0]
+
+                            }
+                        ],
+                    yAxis: [
+                        {
+                            type: 'value',
+                            //type: 'category',
+                            position: 'left',
+                            alignTicks: true,
+                            offset: 0,
+                            axisLine: {
+                                show: true,
+                                lineStyle: {
+                                color: colors[0]
+                                    }
+                                },
+                            // axisLabel: {
+                            //     formatter: '{value}'
+                            //     },
+                            }
+                        ],
+                    series: [
+                        {
+                            name: iterms[0],
+                            type: 'line',
+                            yAxisIndex: 0,
+                            xAxisIndex: 0,
+                            data: data0[0]
+                            },
+                        ]
+                    };
+                option[0] && myChart.setOption(option[0]);
+                }
+
+            function ytyt(ite) {
+                times +=1;
+                //alert(rows.length);
+                for (var i = 0; i< iterms.length; i++){
+                    if (ite==iterms[i]){
+                        if(data0[i].length > rows.length+7){
+                            //alert(i);
+                            option[0].xAxis.push(
+                                {
+                                    //type: 'value',
+                                    type: 'category',
+                                    position: 'top',
+                                    offset:times*34,
+                                    axisLine: {
+                                        show: true,
+                                        lineStyle: {
+                                            color: colors[times]
+                                            }
+                                        },
+                                    }
+                                );
+
+                            option[0].yAxis.push(
+                                {
+                                    // type: 'category',
+                                    type: 'value',
+                                    position: 'right',
+                                    alignTicks: true,
+                                    offset: times*34,
+                                    axisLine: {
+                                        show: true,
+                                        lineStyle: {
+                                                color: colors[times]
+                                            }
+                                        },
+                                    axisLabel: {
+                                        formatter: '{value}'
+                                        }
+                                    }
+                                );
+
+                            option[0].series.push(
+                                {
+                                    name: ite,
+                                    type: 'line',
+                                    yAxisIndex: times,
+                                    xAxisIndex: times,
+                                    data: data0[i],
+                                    itemStyle:{color:colors[times]},
+                                    }
+                                );
+                            }
+                        else {
+                            //  times initial with 1
+                            option[0].xAxis.push(
+                                {
+                                    //type: 'value',
+                                    type: 'category',
+                                    position: 'top',
+                                    offset:times*34,
+                                    axisLine: {
+                                        show: true,
+                                        lineStyle: {
+                                            color: colors[times]
+                                            }
+                                        },
+                                    }
+                                );
+
+                            option[0].yAxis.push(
+                                {
+                                    type: 'value',
+                                    //type: 'category',
+                                    //  name: ite,
+                                    position: 'right',
+                                    offset: times*34,
+                                    alignTicks: true,
+                                    axisLine: {
+                                        show: true,
+                                        lineStyle: {
+                                            color: colors[times]
+                                            }
+                                        },
+                                    axisLabel: {
+                                        formatter: '{value}'
+                                        }
+                                    }
+                                );
+
+                            option[0].series.push(
+                                {
+                                    name: ite,
+                                    type: 'line',
+                                    yAxisIndex: times,
+                                    data: data0[i],
+                                    smooth:true,
+                                    itemStyle:{
+                                        color:colors[times]
+                                        }
+                                    }
+                                );
+                            }
+                        }
+                    }
+                option[0] && myChart.setOption(option[0]);
+                }
+        </script>
+    </body>
+</html>
